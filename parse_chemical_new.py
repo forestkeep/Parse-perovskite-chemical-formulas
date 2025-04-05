@@ -297,7 +297,8 @@ def main(filename, dict_elements):
                     for index,param_val in enumerate(dict_elements[element].parameters):
                         buf_parameters[index] += conc*param_val
                 else:
-                    print(f"Для Элемента {element} не найдены параметры")
+                    if isinstance(conc, float):
+                        print(f"Для Элемента {element} не найдены параметры")
             dict_culculated_parameters[formula+add_key]["A_site"] = [round(param, 4) for param in buf_parameters]
 
             buf_parameters = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
