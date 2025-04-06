@@ -203,7 +203,6 @@ def convert_to_dataframe(result):
     # Определяем максимальное количество пар элементов в A_site и B_site
     max_a = max((len(v["A_site"]))//2 for v in result.values()) if result else 0
     max_b = max((len(v["B_site"]))//2 for v in result.values()) if result else 0
-    print(f"max_a = {max_a}, max_b = {max_b}")
     
     # Генерируем названия колонок
     columns = []
@@ -244,22 +243,33 @@ def read_file(filename):
         df = df.dropna(axis=1, how='all')
         return df
     
-def main(filename, dict_elements):
+def generate_file_without_parameters(filename, dict_elements = None, test_element = None):
+    if dict_elements == None:
+        dict_elements = {}
     formulas = read_file(filename)
     result = {}
     len_b = 0
     len_a = 0
     count = 0
     dict_culculated_parameters = {}
+
                 
     for col in formulas.columns:
         for formula in formulas[col]:
+            is_debug = False
+            if formula == test_element and test_element:
+                print(f"исходная: {formula}")
+                is_debug = True
+
             count += 1
             add_key = ""
             buf_formula = reformat_formula(formula)
             compaunds = get_all_compaunds(buf_formula)
+            
+            if is_debug:
+                print("=======================================")
+                print(f"{compaunds=}")
             if formula in result.keys():
-                #print(f"{formula} уже есть")
                 add_key = "(1)"
             else:
                 add_key = ""
@@ -272,17 +282,28 @@ def main(filename, dict_elements):
                 "A_site": [],
                 "B_site": []
             }
-            if abs(1 - sum(compaunds.values())) > 0.02:
-                pass
-                #print(f"{formula=} {compaunds=} sum = {sum(compaunds.values())}")
+            if abs(1 - sum(compaunds.values())) > 0.07:
+                result[formula+add_key]["A_site"].append(f"ошибка в стехиметрии составов {compaunds=} sum = {sum(compaunds.values())}")
+                if is_debug:
+                    print(f"{formula=} {compaunds=} sum = {sum(compaunds.values())}")
             else:
                 for compaund, concentration in compaunds.items():
                     sub_compaund = get_sub_compaunds(compaund)
+                    if is_debug:
+                        print(f"{sub_compaund=}")
+
                     if sub_compaund:
                         compaund = rewrite_sub_compaunds(compaund)
+                        if is_debug:
+                            print(f"{compaund=}")
 
                     elements =  find_simple_element_concentrations(compaund)
+                    if is_debug:
+                        print(f"{elements=}")
                     A_site, B_site = split_perovskite(elements, concentration)
+                    if is_debug:
+                        print(f"{A_site=}")
+                        print(f"{B_site=}")
                     for element, concentration in A_site.items():
                         result[formula+add_key]["A_site"].append(element)
                         result[formula+add_key]["A_site"].append(concentration)
@@ -297,8 +318,9 @@ def main(filename, dict_elements):
                     for index,param_val in enumerate(dict_elements[element].parameters):
                         buf_parameters[index] += conc*param_val
                 else:
-                    if isinstance(conc, float):
-                        print(f"Для Элемента {element} не найдены параметры")
+                    if isinstance(element, str) and dict_elements:
+                        print(f"Для Элемента {element} не найдены параметры {formula=}")
+                        
             dict_culculated_parameters[formula+add_key]["A_site"] = [round(param, 4) for param in buf_parameters]
 
             buf_parameters = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
@@ -352,29 +374,64 @@ def convert_results_to_dataframe(result_dict):
     
     return pd.DataFrame(data, columns=columns)
 
-def split_perovskite(elements, concentration_compaund=1.0):
-    A_site = {}
-    B_site = {}
-    current_site = A_site
+def split_perovskite(elements: dict, concentration_compaund=1.0, is_debug=False):
     if 'O' in elements:
-        summa = 0
+        import copy
+        elements2 = copy.deepcopy(elements)
+
+        A_site_1 = {}
+        B_site_1 = {}
+        current_site1 = A_site_1
+        summa_1 = 0
         for element, concentration in elements.items():
             if element == 'O':
                 break
-            current_site[element] = concentration*concentration_compaund
-            summa+= concentration
-            if summa >= 1:
-                current_site = B_site
-                summa = 0
+            current_site1[element] = concentration*concentration_compaund
+            summa_1+= concentration
+            if summa_1 >= 1:
+                current_site1 = B_site_1
+                summa_1 = 0
+
+
+        A_site_2 = {}
+        B_site_2 = {}
+        current_site2 = B_site_2
+        summa_2 = 0
+        for element2, concentration2 in reversed( elements2.items() ):
+            if element2 == 'O':
+                continue
+
+            current_site2[element2] = concentration2*concentration_compaund
+            summa_2+= concentration2
+            if summa_2 >= 1:
+                current_site2 = A_site_2
+                summa_2 = 0
+
+        A_site_2 = dict(reversed(A_site_2.items()))
+        B_site_2 = dict(reversed(B_site_2.items()))
+
+        if is_debug:
+            print(f"A_site_1: {A_site_1}")
+            print(f"B_site_1: {B_site_1}")
+            print(f"summa_1: {summa_1}")
+            print(f"A_site_2: {A_site_2}")
+            print(f"B_site_2: {B_site_2}")
+            print(f"summa_2: {summa_2}")
+
+        if abs(summa_1 - 1) > abs(summa_2 - 1):
+            return A_site_2, B_site_2
+        else:
+            return A_site_1, B_site_1
+
     else:
         print(f"это не перовскит {elements} {concentration_compaund}")
+        return {"это не перовскит":""}, {}
 
-    return A_site, B_site
 
 
 def test():
     result = {}
-    formula = '0.998((K0.458Na0.542)0.96Li0.04)(Nb0.85Ta0.15)O3-0.002BiFeO3'
+    formula = '(K0.44Na0.52Li0.04)0,995Cu0.0025(Nb0.86Ta0.1Sb0.04)O3'
     formula = reformat_formula(formula)
     compaunds = get_all_compaunds(formula)
 
@@ -384,15 +441,11 @@ def test():
             compaund = rewrite_sub_compaunds(compaund)
 
         elements =  find_simple_element_concentrations(compaund)
-        A_site, B_site = split_perovskite(elements, concentration)
-        print(f"{A_site=} {B_site=}")
+        A_site, B_site = split_perovskite(elements, concentration, is_debug=True)
         #return A_site, B_site
 
-if __name__ == '__main__':
-    filename = 'onlyformulas.xlsx'
-    #main(filename)
-    #test()
-    aboutelementsfile = "elements_information.xlsx"
+def generate_file_with_parameters(filename, aboutelementsfile):
+
     elements_raw = read_file(aboutelementsfile)
     elements = {}
     #создали словарь с классами каждого элемента и заполненными аттрибутами
@@ -404,8 +457,15 @@ if __name__ == '__main__':
                 continue
             parameters.append(elements_raw[name][index])
         elements[element].write_parameters(parameters)
-        print(f"{element} {elements[element].parameters}")
 
+    generate_file_without_parameters(filename, elements)
 
-    main(filename, elements)
+if __name__ == '__main__':
+    filename = 'KNN_dataset_input.xlsx'
+    aboutelementsfile = "elements_information.xlsx"
+
+    #generate_file_with_parameters(filename, aboutelementsfile)
+    generate_file_without_parameters(filename)
+    #test()
+    
             
