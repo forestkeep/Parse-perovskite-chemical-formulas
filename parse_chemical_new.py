@@ -1,5 +1,6 @@
 import re
 import pandas as pd
+import numpy as np
 
 class chemical_elements():
     def __init__(self, element):
@@ -146,8 +147,6 @@ def rewrite_sub_compaunds(compound: str) -> str:
     return compound
 
     
-
-
 def reformat_formula(formula):
     formula = formula.replace(' ', '')
     formula = formula.replace('−', '-')
@@ -199,6 +198,7 @@ def get_concentrations_compaunds(compaund):
         # Если числа нет - концентрация 1, формула без изменений
         compaund = remove_outer_brackets(compaund)
         return [1.0, compaund]
+
 def convert_to_dataframe(result):
     # Определяем максимальное количество пар элементов в A_site и B_site
     max_a = max((len(v["A_site"]))//2 for v in result.values()) if result else 0
@@ -338,29 +338,27 @@ def generate_file_without_parameters(filename, dict_elements = None, test_elemen
     df.to_excel('result_parameters.xlsx')
 
 def convert_results_to_dataframe(result_dict):
-    # Создаем заголовки столбцов
     param_names = [
-    "A_site_r",
-    "B_site_r",
-    "Atomic_weight",
-    "Volume_of_atom",
-    "Nuclear_charge_effective(Slater)",
-    "Distance_from_core_electron(Schubert)",
-    "Distance_from_valence_electron(Schubert)",
-    "Electron_affinity",
-    "Moment_nuclear_magnetic",
-    "Valence_electron_number",
-    "Pauling",
-    "Allred Rochow",
-    "%_covalent_Martynov&Batsanov",
-    "Absolute",
-    "Oganov"
-]
+        "A_site_r",
+        "B_site_r",
+        "Atomic_weight",
+        "Volume_of_atom",
+        "Nuclear_charge_effectiveSlater",
+        "Distance_from_core_electronSchubert",
+        "Distance_from_valence_electronSchubert",
+        "Electron_affinity",
+        "Moment_nuclear_magnetic",
+        "Valence_electron_number",
+        "Pauling",
+        "Allred Rochow",
+        "%_covalent_Martynov&Batsanov",
+        "Absolute",
+        "Oganov"
+    ]
     a_columns = [f"{name}_A" for name in param_names]
     b_columns = [f"{name}_B" for name in param_names]
     columns = ['formula'] + a_columns + b_columns
     
-    # Собираем данные
     data = []
     for formula, sites_data in result_dict.items():
         a_params = sites_data['A_site']
@@ -372,7 +370,22 @@ def convert_results_to_dataframe(result_dict):
         row = [formula] + a_params + b_params
         data.append(row)
     
-    return pd.DataFrame(data, columns=columns)
+    df = pd.DataFrame(data, columns=columns)
+
+
+    df = add_new_t_u(df, 'A_site_r_A', 'B_site_r_B')
+    
+    return df
+
+def add_new_t_u(data_frame, key1, key2):
+    if key1 not in data_frame.keys() or key2 not in data_frame.keys():
+        print("ключей нет в словаре")
+    else:
+        data_frame['t'] = (1.4 + data_frame[key1]) / (np.sqrt(2) * (1.4 + data_frame[key2]))
+        data_frame['u'] = data_frame[key2] / 1.4
+    return data_frame
+
+
 
 def split_perovskite(elements: dict, concentration_compaund=1.0, is_debug=False):
     if 'O' in elements:
@@ -427,8 +440,6 @@ def split_perovskite(elements: dict, concentration_compaund=1.0, is_debug=False)
         print(f"это не перовскит {elements} {concentration_compaund}")
         return {"это не перовскит":""}, {}
 
-
-
 def test():
     result = {}
     formula = '(K0.44Na0.52Li0.04)0,995Cu0.0025(Nb0.86Ta0.1Sb0.04)O3'
@@ -461,11 +472,11 @@ def generate_file_with_parameters(filename, aboutelementsfile):
     generate_file_without_parameters(filename, elements)
 
 if __name__ == '__main__':
-    filename = 'KNN_dataset_input.xlsx'
+    filename = 'formula.xlsx'
     aboutelementsfile = "elements_information.xlsx"
 
-    #generate_file_with_parameters(filename, aboutelementsfile)
-    generate_file_without_parameters(filename)
+    generate_file_with_parameters(filename, aboutelementsfile)
+    #generate_file_without_parameters(filename)
     #test()
     
             
